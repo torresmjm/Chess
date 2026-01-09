@@ -36,6 +36,7 @@ void PrintChessboard();
 
 PIECE* GetSelectedPiece();
 
+int GetCurrentTurn();
 void PlacePiece(int row, int column, int color, PIECETYPE type);
 void PlaceStartingPieces();
 void RenderPieces(Vector2 mouseGamePos);

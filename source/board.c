@@ -8,6 +8,8 @@ static PIECE* selectedPiece = NULL;
 static int selectedRow = -1;
 static int selectedColumn = -1;
 
+static int currentTurn = 0;
+
 // Basically initializes the chessboard tiles and their colors
 void InitializeChessboard() {
     int boardPixelSize = BOARD_SIZE * TILE_SIZE;
@@ -31,6 +33,10 @@ void InitializeChessboard() {
             chessboard[row][column].isAllowed = false; 
         }
     }
+}
+
+int GetCurrentTurn() {
+    return currentTurn;
 }
 
 // Renders the chessboard and highlights pressed and allowed tiles
@@ -195,6 +201,9 @@ void MovePiece(Vector2 mousePos) {
                 selectedPiece = NULL;
                 selectedRow = -1;
                 selectedColumn = -1;
+
+                currentTurn = (currentTurn == 0) ? 1 : 0;
+
                 return;
             }
             
@@ -212,6 +221,10 @@ void MovePiece(Vector2 mousePos) {
             }
             
             PIECE *piece = &pieces[tile->occupiedBy];
+
+            if (piece->color != currentTurn) {
+                return;
+            }
             
             // Clicking the same piece - deselect it
             if (selectedPiece == piece) {
@@ -468,4 +481,8 @@ void UnloadChessboard() {
     }
 
     pieceCount = 0;
+    currentTurn = 0; 
+    selectedPiece = NULL;
+    selectedRow = -1;
+    selectedColumn = -1;
 }
