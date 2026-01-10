@@ -2,6 +2,7 @@
 #define BOARD_H
 
 #include <stdio.h>
+#include <stdlib.h> 
 #include "raylib.h"
 
 #define TILE_SIZE 100
@@ -29,20 +30,34 @@ typedef struct Piece {
     Texture2D texture;
     int color;
     PIECETYPE type;
+    bool hasMoved;
 } PIECE;
 
+/* 
+    Manage the chessboard state 
+*/
 void InitializeChessboard();
-void PrintChessboard();
+void RenderChessboard();
+void UnloadChessboard();
 
-PIECE* GetSelectedPiece();
-
-int GetCurrentTurn();
+/*
+    Manage piece
+*/
 void PlacePiece(int row, int column, int color, PIECETYPE type);
 void PlaceStartingPieces();
-void RenderPieces(Vector2 mouseGamePos);
+
+/*
+    Manage piece movements, game rules, interactions and rendering
+*/
+
 void MovePiece(Vector2 mousePos);
+void RenderPieces(Vector2 mouseGamePos);
 void CheckAllowedMoves();
 void UpdatePiecePosition(Vector2 mousePos);
-void UnloadChessboard();
+
+PIECE* GetSelectedPiece();
+int GetCurrentTurn();
+
+bool IsSquareUnderAttack(int row, int column, int attackingColor);
 
 #endif // BOARD_H

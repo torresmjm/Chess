@@ -55,7 +55,7 @@ void RenderScreen(SCREEN *currentScreen){
             DrawText("TITLE SCREEN", 120, 20, 80, LIGHTGRAY);
         } break;
         case GAME:{
-            PrintChessboard();
+            RenderChessboard();
             RenderPieces(GetMousePosition());
         } break;
         default: break;

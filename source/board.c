@@ -1,5 +1,12 @@
 #include "board.h"
 
+bool IsSquareUnderAttack(int row, int col, int byColor);
+int FindKing(int color);
+bool IsMoveLegal(int fromRow, int fromCol, int toRow, int toCol);
+bool HasLegalMoves(int color);
+void UpdateCheckStatus();
+void CheckAllowedMoves();
+
 static TILES chessboard [BOARD_SIZE][BOARD_SIZE];
 static PIECE pieces[32];
 static int pieceCount = 0;
@@ -10,8 +17,27 @@ static int selectedColumn = -1;
 
 static int currentTurn = 0;
 
-// Basically initializes the chessboard tiles and their colors
+static int lastMoveFromRow = -1;
+static int lastMoveFromColumn = -1;
+static int lastMoveToRow = -1;
+static int lastMoveToColumn = -1;
+
+static bool whiteKingInCheck = false;
+static bool blackKingInCheck = false;
+static bool isCheckmate = false;
+static int winner = -1;
+
+
+int GetCurrentTurn() {
+    return currentTurn;
+}
+
+PIECE* GetSelectedPiece() {
+    return selectedPiece;
+}
+
 void InitializeChessboard() {
+
     int boardPixelSize = BOARD_SIZE * TILE_SIZE;
     int startX = (1920 - boardPixelSize) / 2;
     int startY = (1080 - boardPixelSize) / 2;
@@ -35,20 +61,21 @@ void InitializeChessboard() {
     }
 }
 
-int GetCurrentTurn() {
-    return currentTurn;
-}
+void RenderChessboard() {
 
-// Renders the chessboard and highlights pressed and allowed tiles
-void PrintChessboard() {
-
-    // We check each slot in array and set as a so called "tiles" that contains based on the struct in board.h
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int column = 0; column < BOARD_SIZE; column++) {
 
             Color tileColor;
+
             if (chessboard[row][column].isPressed) {
                 tileColor = BLUE;
+            } else if ((row == lastMoveFromRow && column == lastMoveFromColumn)) {
+                tileColor = (Color){244, 196, 48, 255};
+ 
+            } else if ((row == lastMoveToRow && column == lastMoveToColumn)) {
+                tileColor = (Color){255, 244, 79, 255};
+
             } else {
                 tileColor = (chessboard[row][column].color == 0) ? LIGHTGRAY : DARKGRAY;
             }
@@ -90,6 +117,7 @@ void PlacePiece(int row, int column, int color, PIECETYPE type) {
     pieces[pieceCount].position = chessboard[row][column].position;
     pieces[pieceCount].color = color;
     pieces[pieceCount].type = type;
+    pieces[pieceCount].hasMoved = false;
     chessboard[row][column].occupiedBy = pieceCount;
     pieceCount++;
 }
@@ -105,12 +133,12 @@ void PlaceStartingPieces() {
     PlacePiece(0, 6, 1, KNIGHT);
     PlacePiece(0, 7, 1, ROOK);
     
-    for (int col = 0; col < BOARD_SIZE; col++) {
-        PlacePiece(1, col, 1, PAWN);
+    for (int column = 0; column < BOARD_SIZE; column++) {
+        PlacePiece(1, column, 1, PAWN);
     }
     
-    for (int col = 0; col < BOARD_SIZE; col++) {
-        PlacePiece(6, col, 0, PAWN);
+    for (int column = 0; column < BOARD_SIZE; column++) {
+        PlacePiece(6, column, 0, PAWN);
     }
     
     PlacePiece(7, 0, 0, ROOK);
@@ -123,9 +151,164 @@ void PlaceStartingPieces() {
     PlacePiece(7, 7, 0, ROOK);
 }
 
-// So we can call the variable selectedPiece from other files since its encapsulated here
-PIECE* GetSelectedPiece() {
-    return selectedPiece;
+int FindKing(int color) {
+    for (int i = 0; i < pieceCount; i++) {
+        if (pieces[i].type == KING && 
+            pieces[i].color == color && 
+            pieces[i].position.x >= 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool IsMoveLegal(int fromRow, int fromCol, int toRow, int toCol) {
+    // Simulate the move
+    int movingPieceIndex = chessboard[fromRow][fromCol].occupiedBy;
+    int capturedPieceIndex = chessboard[toRow][toCol].occupiedBy;
+    
+    PIECE *movingPiece = &pieces[movingPieceIndex];
+    Vector2 originalPos = movingPiece->position;
+    Vector2 capturedOriginalPos = {-1, -1};
+    
+    // Temporarily make the move
+    chessboard[fromRow][fromCol].occupiedBy = -1;
+    movingPiece->position = chessboard[toRow][toCol].position;
+    
+    if (capturedPieceIndex != -1) {
+        capturedOriginalPos = pieces[capturedPieceIndex].position;
+        pieces[capturedPieceIndex].position.x = -1000;
+        pieces[capturedPieceIndex].position.y = -1000;
+    }
+    
+    chessboard[toRow][toCol].occupiedBy = movingPieceIndex;
+    
+    // Find our king
+    int kingIndex = FindKing(movingPiece->color);
+    int kingRow = -1, kingCol = -1;
+    
+    // Find king's position on board
+    for (int r = 0; r < BOARD_SIZE; r++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            if (chessboard[r][c].occupiedBy == kingIndex) {
+                kingRow = r;
+                kingCol = c;
+                break;
+            }
+        }
+        if (kingRow != -1) break;
+    }
+    
+    // Check if king is under attack
+    int enemyColor = (movingPiece->color == 0) ? 1 : 0;
+    bool isLegal = !IsSquareUnderAttack(kingRow, kingCol, enemyColor);
+    
+    // Undo the move
+    chessboard[toRow][toCol].occupiedBy = capturedPieceIndex;
+    chessboard[fromRow][fromCol].occupiedBy = movingPieceIndex;
+    movingPiece->position = originalPos;
+    
+    if (capturedPieceIndex != -1) {
+        pieces[capturedPieceIndex].position = capturedOriginalPos;
+    }
+    
+    return isLegal;
+}
+
+bool HasLegalMoves(int color) {
+    for (int fromRow = 0; fromRow < BOARD_SIZE; fromRow++) {
+        for (int fromCol = 0; fromCol < BOARD_SIZE; fromCol++) {
+            int pieceIndex = chessboard[fromRow][fromCol].occupiedBy;
+            if (pieceIndex == -1) continue;
+            if (pieces[pieceIndex].color != color) continue;
+            
+            // Check all possible destination squares
+            for (int toRow = 0; toRow < BOARD_SIZE; toRow++) {
+                for (int toCol = 0; toCol < BOARD_SIZE; toCol++) {
+                    // Temporarily set this piece as selected to check moves
+                    PIECE *tempPiece = selectedPiece;
+                    int tempRow = selectedRow;
+                    int tempCol = selectedColumn;
+                    
+                    selectedPiece = &pieces[pieceIndex];
+                    selectedRow = fromRow;
+                    selectedColumn = fromCol;
+                    
+                    // Clear and recalculate allowed moves
+                    for (int r = 0; r < BOARD_SIZE; r++)
+                        for (int c = 0; c < BOARD_SIZE; c++)
+                            chessboard[r][c].isAllowed = false;
+                    
+                    CheckAllowedMoves();
+                    
+                    // If this square is allowed and the move is legal
+                    if (chessboard[toRow][toCol].isAllowed && 
+                        IsMoveLegal(fromRow, fromCol, toRow, toCol)) {
+                        
+                        // Restore selection
+                        selectedPiece = tempPiece;
+                        selectedRow = tempRow;
+                        selectedColumn = tempCol;
+                        return true;
+                    }
+                    
+                    // Restore selection
+                    selectedPiece = tempPiece;
+                    selectedRow = tempRow;
+                    selectedColumn = tempCol;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void UpdateCheckStatus() {
+    // Check if white king is in check
+    int whiteKingIndex = FindKing(0);
+    if (whiteKingIndex != -1) {
+        int kingRow = -1, kingCol = -1;
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (chessboard[r][c].occupiedBy == whiteKingIndex) {
+                    kingRow = r;
+                    kingCol = c;
+                    break;
+                }
+            }
+            if (kingRow != -1) break;
+        }
+        whiteKingInCheck = IsSquareUnderAttack(kingRow, kingCol, 1);
+    }
+    
+    // Check if black king is in check
+    int blackKingIndex = FindKing(1);
+    if (blackKingIndex != -1) {
+        int kingRow = -1, kingCol = -1;
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (chessboard[r][c].occupiedBy == blackKingIndex) {
+                    kingRow = r;
+                    kingCol = c;
+                    break;
+                }
+            }
+            if (kingRow != -1) break;
+        }
+        blackKingInCheck = IsSquareUnderAttack(kingRow, kingCol, 0);
+    }
+    
+    // Check for checkmate
+    if (whiteKingInCheck && !HasLegalMoves(0)) {
+        isCheckmate = true;
+        winner = 1; // Black wins
+    } else if (blackKingInCheck && !HasLegalMoves(1)) {
+        isCheckmate = true;
+        winner = 0; // White wins
+    } else {
+        isCheckmate = false;
+        winner = -1;
+    }
 }
 
 // Renders all pieces on the board, with the selected piece following the mouse
@@ -158,6 +341,8 @@ void RenderPieces(Vector2 mouseGamePos) {
 // Handles mouse clicks to select/deselect pieces and move them
 void MovePiece(Vector2 mousePos) {
     if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
+
+    if (isCheckmate) return;
     
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int column = 0; column < BOARD_SIZE; column++) {
@@ -187,9 +372,44 @@ void MovePiece(Vector2 mousePos) {
                 chessboard[selectedRow][selectedColumn].occupiedBy = -1;
                 
                 // Move the piece to the new position
+                
+                // Check if this is a castling move
+                if (selectedPiece->type == KING && abs(column - selectedColumn) == 2) {
+                    
+                    // Determine if kingside or queenside
+                    if (column > selectedColumn) {
+                        // Kingside castling
+                        int rookIndex = chessboard[row][selectedColumn + 3].occupiedBy;
+                        PIECE *rook = &pieces[rookIndex];
+                        
+                        // Move rook
+                        chessboard[row][selectedColumn + 3].occupiedBy = -1;
+                        rook->position = chessboard[row][selectedColumn + 1].position;
+                        chessboard[row][selectedColumn + 1].occupiedBy = rookIndex;
+                        rook->hasMoved = true;
+                    } else {
+                        // Queenside castling
+                        int rookIndex = chessboard[row][selectedColumn - 4].occupiedBy;
+                        PIECE *rook = &pieces[rookIndex];
+                        
+                        // Move rook
+                        chessboard[row][selectedColumn - 4].occupiedBy = -1;
+                        rook->position = chessboard[row][selectedColumn - 1].position;
+                        chessboard[row][selectedColumn - 1].occupiedBy = rookIndex;
+                        rook->hasMoved = true;
+                    }
+                }
+
+                // Move the piece to the new position
                 selectedPiece->position = tile->position;
                 tile->occupiedBy = selectedPiece - pieces;
+                selectedPiece->hasMoved = true;  // Mark piece as moved
                 
+                lastMoveFromColumn = selectedColumn;
+                lastMoveFromRow = selectedRow;
+                lastMoveToColumn = column;
+                lastMoveToRow = row;
+
                 // Clear selection and allowed moves
                 for (int r = 0; r < BOARD_SIZE; r++) {
                     for (int c = 0; c < BOARD_SIZE; c++) {
@@ -203,6 +423,13 @@ void MovePiece(Vector2 mousePos) {
                 selectedColumn = -1;
 
                 currentTurn = (currentTurn == 0) ? 1 : 0;
+
+                UpdateCheckStatus();
+
+                // Prevent further moves if checkmate
+                if (isCheckmate) {
+                    return;
+                }
 
                 return;
             }
@@ -238,10 +465,10 @@ void MovePiece(Vector2 mousePos) {
             } 
             // Clicking a different piece while one is already selected - deselect only
             else if (selectedPiece != NULL) {
-                for (int r = 0; r < BOARD_SIZE; r++)
-                    for (int c = 0; c < BOARD_SIZE; c++) {
-                        chessboard[r][c].isPressed = false;
-                        chessboard[r][c].isAllowed = false;
+                for (int row = 0; row < BOARD_SIZE; row++)
+                    for (int column = 0; column < BOARD_SIZE; column++) {
+                        chessboard[row][column].isPressed = false;
+                        chessboard[row][column].isAllowed = false;
                     }
                 selectedPiece = NULL;
                 selectedRow = -1;
@@ -258,6 +485,119 @@ void MovePiece(Vector2 mousePos) {
             return;
         }
     }
+}
+
+bool IsSquareUnderAttack(int row, int column, int byColor) {
+    // Check if square (row, column) is under attack by pieces of color 'byColor'
+
+    for (int i = 0; i < pieceCount; i++) {
+        if (pieces[i].color != byColor) continue;
+        if (pieces[i].position.x < 0) continue; // Skip captured pieces
+        
+        // Find the piece's position on the board
+        int pieceRow = -1, pieceCol = -1;
+        for (int r = 0; r < BOARD_SIZE; r++) {
+            for (int c = 0; c < BOARD_SIZE; c++) {
+                if (chessboard[r][c].occupiedBy == i) {
+                    pieceRow = r;
+                    pieceCol = c;
+                    break;
+                }
+            }
+            if (pieceRow != -1) break;
+        }
+        
+        if (pieceRow == -1) continue;
+        
+        // Check if this piece can attack the target square
+        switch (pieces[i].type) {
+            case PAWN: {
+                int direction = (pieces[i].color == 1) ? 1 : -1;
+                if (pieceRow + direction == row && 
+                    (pieceCol - 1 == column || pieceCol + 1 == column)) {
+                    return true;
+                }
+                break;
+            }
+            
+            case KNIGHT: {
+                int moves[8][2] = {{-2, -1}, {-2, 1}, {-1, -2}, {-1, 2}, 
+                                   {1, -2}, {1, 2}, {2, -1}, {2, 1}};
+                for (int m = 0; m < 8; m++) {
+                    if (pieceRow + moves[m][0] == row && pieceCol + moves[m][1] == column) {
+                        return true;
+                    }
+                }
+                break;
+            }
+            
+            case BISHOP: {
+                int directions[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+                for (int d = 0; d < 4; d++) {
+                    for (int dist = 1; dist < BOARD_SIZE; dist++) {
+                        int newRow = pieceRow + directions[d][0] * dist;
+                        int newCol = pieceCol + directions[d][1] * dist;
+                        
+                        if (newRow < 0 || newRow >= BOARD_SIZE || 
+                            newCol < 0 || newCol >= BOARD_SIZE) break;
+                        
+                        if (newRow == row && newCol == column) return true;
+                        if (chessboard[newRow][newCol].occupiedBy != -1) break;
+                    }
+                }
+                break;
+            }
+            
+            case ROOK: {
+                int directions[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+                for (int d = 0; d < 4; d++) {
+                    for (int dist = 1; dist < BOARD_SIZE; dist++) {
+                        int newRow = pieceRow + directions[d][0] * dist;
+                        int newCol = pieceCol + directions[d][1] * dist;
+                        
+                        if (newRow < 0 || newRow >= BOARD_SIZE || 
+                            newCol < 0 || newCol >= BOARD_SIZE) break;
+                        
+                        if (newRow == row && newCol == column) return true;
+                        if (chessboard[newRow][newCol].occupiedBy != -1) break;
+                    }
+                }
+                break;
+            }
+            
+            case QUEEN: {
+                int directions[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, 
+                                        {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+                for (int d = 0; d < 8; d++) {
+                    for (int dist = 1; dist < BOARD_SIZE; dist++) {
+                        int newRow = pieceRow + directions[d][0] * dist;
+                        int newCol = pieceCol + directions[d][1] * dist;
+                        
+                        if (newRow < 0 || newRow >= BOARD_SIZE || 
+                            newCol < 0 || newCol >= BOARD_SIZE) break;
+                        
+                        if (newRow == row && newCol == column) return true;
+                        if (chessboard[newRow][newCol].occupiedBy != -1) break;
+                    }
+                }
+                break;
+            }
+            
+            case KING: {
+                int directions[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, 
+                                        {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+                for (int d = 0; d < 8; d++) {
+                    if (pieceRow + directions[d][0] == row && 
+                        pieceCol + directions[d][1] == column) {
+                        return true;
+                    }
+                }
+                break;
+            }
+        }
+    }
+    
+    return false;
 }
 
 void CheckAllowedMoves() {
@@ -392,7 +732,7 @@ void CheckAllowedMoves() {
         }
         
         case KING: {
-            // All 8 directions, one square only
+            // Normal king moves (existing code)
             int directions[8][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
             for (int d = 0; d < 8; d++) {
                 int newRow = row + directions[d][0];
@@ -404,7 +744,69 @@ void CheckAllowedMoves() {
                         chessboard[newRow][newCol].isAllowed = true;
                 }
             }
+            
+            // CASTLING LOGIC - Add this section
+            if (!selectedPiece->hasMoved) {
+                int enemyColor = (selectedPiece->color == 0) ? 1 : 0;
+                
+                // Check if king is currently in check
+                if (!IsSquareUnderAttack(row, column, enemyColor)) {
+                    
+                    // Kingside castling (right)
+                    if (column + 3 < BOARD_SIZE) {
+                        int rookIndex = chessboard[row][column + 3].occupiedBy;
+                        if (rookIndex != -1 && 
+                            pieces[rookIndex].type == ROOK && 
+                            pieces[rookIndex].color == selectedPiece->color &&
+                            !pieces[rookIndex].hasMoved) {
+                            
+                            // Check if squares between are empty
+                            if (chessboard[row][column + 1].occupiedBy == -1 &&
+                                chessboard[row][column + 2].occupiedBy == -1) {
+                                
+                                // Check if king passes through or lands on attacked square
+                                if (!IsSquareUnderAttack(row, column + 1, enemyColor) &&
+                                    !IsSquareUnderAttack(row, column + 2, enemyColor)) {
+                                    chessboard[row][column + 2].isAllowed = true;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Queenside castling (left)
+                    if (column - 4 >= 0) {
+                        int rookIndex = chessboard[row][column - 4].occupiedBy;
+                        if (rookIndex != -1 && 
+                            pieces[rookIndex].type == ROOK && 
+                            pieces[rookIndex].color == selectedPiece->color &&
+                            !pieces[rookIndex].hasMoved) {
+                            
+                            // Check if squares between are empty
+                            if (chessboard[row][column - 1].occupiedBy == -1 &&
+                                chessboard[row][column - 2].occupiedBy == -1 &&
+                                chessboard[row][column - 3].occupiedBy == -1) {
+                                
+                                // Check if king passes through or lands on attacked square
+                                if (!IsSquareUnderAttack(row, column - 1, enemyColor) &&
+                                    !IsSquareUnderAttack(row, column - 2, enemyColor)) {
+                                    chessboard[row][column - 2].isAllowed = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             break;
+        }
+    }
+
+    for (int r = 0; r < BOARD_SIZE; r++) {
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            if (chessboard[r][c].isAllowed) {
+                if (!IsMoveLegal(selectedRow, selectedColumn, r, c)) {
+                    chessboard[r][c].isAllowed = false;
+                }
+            }
         }
     }
 }
@@ -478,6 +880,7 @@ void UnloadChessboard() {
         pieces[i].type = PAWN;
         pieces[i].position.x = 0;
         pieces[i].position.y = 0;
+        pieces[i].hasMoved = false;
     }
 
     pieceCount = 0;
@@ -485,4 +888,14 @@ void UnloadChessboard() {
     selectedPiece = NULL;
     selectedRow = -1;
     selectedColumn = -1;
+
+    lastMoveFromRow = -1;
+    lastMoveFromColumn = -1;
+    lastMoveToRow = -1;
+    lastMoveToColumn = -1;
+    
+    whiteKingInCheck = false;
+    blackKingInCheck = false;
+    isCheckmate = false;
+    winner = -1;
 }
