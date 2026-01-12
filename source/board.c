@@ -27,7 +27,6 @@ static bool blackKingInCheck = false;
 static bool isCheckmate = false;
 static int winner = -1;
 
-
 int GetCurrentTurn() {
     return currentTurn;
 }
@@ -75,7 +74,8 @@ void RenderChessboard() {
  
             } else if ((row == lastMoveToRow && column == lastMoveToColumn)) {
                 tileColor = (Color){255, 244, 79, 255};
-
+            } else if ((whiteKingInCheck || blackKingInCheck) && chessboard[row][column].occupiedBy == FindKing(currentTurn)) {
+                tileColor = RED;
             } else {
                 tileColor = (chessboard[row][column].color == 0) ? LIGHTGRAY : DARKGRAY;
             }
@@ -249,6 +249,11 @@ bool HasLegalMoves(int color) {
                         selectedPiece = tempPiece;
                         selectedRow = tempRow;
                         selectedColumn = tempCol;
+
+                        for (int r = 0; r < BOARD_SIZE; r++)
+                            for (int c = 0; c < BOARD_SIZE; c++)
+                                chessboard[r][c].isAllowed = false;
+
                         return true;
                     }
                     
@@ -260,6 +265,11 @@ bool HasLegalMoves(int color) {
             }
         }
     }
+
+    for (int r = 0; r < BOARD_SIZE; r++)
+        for (int c = 0; c < BOARD_SIZE; c++)
+            chessboard[r][c].isAllowed = false;
+            
     return false;
 }
 
