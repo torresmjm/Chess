@@ -24,6 +24,7 @@ int main () {
         EndDrawing();
     }
 
+    UnloadScreen(&screenToLoad);
     CloseWindow();
 
     return 0;

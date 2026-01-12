@@ -1,4 +1,7 @@
 #include "screen.h"
+#include "utilities/button.h"
+
+static BUTTON startButton;
 
 void InitializeScreen(){
 
@@ -13,9 +16,11 @@ void ChangeScreen(SCREEN *currentScreen) {
             }
         } break;
         case TITLE:{
-            if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
+            InitializeButton(&startButton, "test.png", (Vector2){860, 400});
+            if (IsButtonPressed(startButton))
             {
                 *currentScreen = GAME;
+                UnloadButton(&startButton);
             }   
         } break;
         case GAME:{
@@ -53,6 +58,7 @@ void RenderScreen(SCREEN *currentScreen){
         } break;
         case TITLE:{
             DrawText("TITLE SCREEN", 120, 20, 80, LIGHTGRAY);
+            RenderButton(startButton);
         } break;
         case GAME:{
             RenderChessboard();
