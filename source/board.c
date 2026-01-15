@@ -112,7 +112,6 @@ void RenderChessboard() {
     }
 }
 
-// Helpers to place pieces on the board
 void PlacePiece(int row, int column, int color, PIECETYPE type) {
     pieces[pieceCount].position = chessboard[row][column].position;
     pieces[pieceCount].color = color;
@@ -122,7 +121,6 @@ void PlacePiece(int row, int column, int color, PIECETYPE type) {
     pieceCount++;
 }
 
-// Places all pieces in their starting positions
 void PlaceStartingPieces() {
     PlacePiece(0, 0, 1, ROOK);
     PlacePiece(0, 1, 1, KNIGHT);
@@ -269,7 +267,7 @@ bool HasLegalMoves(int color) {
     for (int r = 0; r < BOARD_SIZE; r++)
         for (int c = 0; c < BOARD_SIZE; c++)
             chessboard[r][c].isAllowed = false;
-            
+
     return false;
 }
 
@@ -321,7 +319,6 @@ void UpdateCheckStatus() {
     }
 }
 
-// Renders all pieces on the board, with the selected piece following the mouse
 void RenderPieces(Vector2 mouseGamePos) {
     for (int i = 0; i < pieceCount; i++) {
 
@@ -348,7 +345,10 @@ void RenderPieces(Vector2 mouseGamePos) {
     }
 }
 
-// Handles mouse clicks to select/deselect pieces and move them
+void PromotePawn(int pieceIndex) {
+    pieces[pieceIndex].type = QUEEN;
+}
+
 void MovePiece(Vector2 mousePos) {
     if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
 
@@ -414,6 +414,19 @@ void MovePiece(Vector2 mousePos) {
                 selectedPiece->position = tile->position;
                 tile->occupiedBy = selectedPiece - pieces;
                 selectedPiece->hasMoved = true;  // Mark piece as moved
+
+                int movedRow = row;
+                int movedCol = column;
+                int movedIndex = tile->occupiedBy;
+
+                PIECE *movedPiece = &pieces[movedIndex];
+
+                if (movedPiece->type == PAWN) {
+                    if ((movedPiece->color == 0 && movedRow == 0) ||
+                        (movedPiece->color == 1 && movedRow == 7)) {
+                        PromotePawn(movedIndex);
+                    }
+                }
                 
                 lastMoveFromColumn = selectedColumn;
                 lastMoveFromRow = selectedRow;
@@ -496,6 +509,7 @@ void MovePiece(Vector2 mousePos) {
         }
     }
 }
+
 
 bool IsSquareUnderAttack(int row, int column, int byColor) {
     // Check if square (row, column) is under attack by pieces of color 'byColor'
