@@ -313,6 +313,12 @@ void UpdateCheckStatus() {
     } else if (blackKingInCheck && !HasLegalMoves(1)) {
         isCheckmate = true;
         winner = 0; // White wins
+    } else if (!whiteKingInCheck && !HasLegalMoves(0)) {
+        isCheckmate = true;
+        winner = -1; // DRAW
+    } else if (!blackKingInCheck && !HasLegalMoves(1)) {
+        isCheckmate = true;
+        winner = -1; // DRAW
     } else {
         isCheckmate = false;
         winner = -1;
@@ -353,7 +359,7 @@ void MovePiece(Vector2 mousePos) {
     if (!IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) return;
 
     if (isCheckmate) return;
-    
+        
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int column = 0; column < BOARD_SIZE; column++) {
             TILES *tile = &chessboard[row][column];
@@ -509,7 +515,6 @@ void MovePiece(Vector2 mousePos) {
         }
     }
 }
-
 
 bool IsSquareUnderAttack(int row, int column, int byColor) {
     // Check if square (row, column) is under attack by pieces of color 'byColor'
