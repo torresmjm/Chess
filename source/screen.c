@@ -1,36 +1,42 @@
 #include "screen.h"
-#include "utilities/button.h"
+#include "menu.h"
 
-static BUTTON startButton;
+static SCREEN currentScreen = INTRO;
+static bool gameStart = false;
 
 void InitializeScreen(){
-
+    currentScreen = INTRO;
 }
 
-void ChangeScreen(SCREEN *currentScreen) {
-    switch (*currentScreen) {
-        case INTRO:{
-            if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
+void ChangeScreen(SCREEN newScreen) {
+    currentScreen = newScreen;
+}
+
+SCREEN GetCurrentScreen() {
+    return currentScreen;
+}
+
+void UpdateScreen() {
+    switch (currentScreen)
+    {
+        case INTRO:
+            if (IsKeyPressed(KEY_ENTER))
             {
-                *currentScreen = TITLE;
+                ChangeScreen(TITLE);
             }
-        } break;
-        case TITLE:{
-            InitializeButton(&startButton, "test.png", (Vector2){860, 400});
-            if (IsButtonPressed(startButton))
-            {
-                *currentScreen = GAME;
-                UnloadButton(&startButton);
-            }   
-        } break;
-        case GAME:{
+            break;
+
+        case TITLE:
+            break;
+
+        case GAME:
             if (GetSelectedPiece())
                 SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
             else
                 SetMouseCursor(MOUSE_CURSOR_DEFAULT);
 
-            static bool gameStart = false;
-            if (!gameStart) {
+            if (!gameStart)
+            {
                 InitializeChessboard();
                 PlaceStartingPieces();
                 gameStart = true;
@@ -41,24 +47,22 @@ void ChangeScreen(SCREEN *currentScreen) {
             if (IsKeyPressed(KEY_ENTER))
             {
                 UnloadChessboard();
-                *currentScreen = INTRO;
                 gameStart = false;
+                ChangeScreen(INTRO);
             }
-
-        } break;
-        default: break;
+            break;
     }
 }
 
-void RenderScreen(SCREEN *currentScreen){
-    switch (*currentScreen) {
+void RenderScreen(){
+    switch (currentScreen) {
         case INTRO:{
             DrawText("INTRO SCREEN", 120, 20, 80, LIGHTGRAY);
             
         } break;
         case TITLE:{
             DrawText("TITLE SCREEN", 120, 20, 80, LIGHTGRAY);
-            RenderButton(startButton);
+            RenderMenu();
         } break;
         case GAME:{
             RenderChessboard();
@@ -66,8 +70,4 @@ void RenderScreen(SCREEN *currentScreen){
         } break;
         default: break;
     }
-}
-
-void UnloadScreen() {
-
 }

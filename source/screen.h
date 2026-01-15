@@ -1,3 +1,6 @@
+#ifndef SCREEN_H
+#define SCREEN_H
+
 #include "raylib.h"
 #include <stdio.h>
 #include "board.h"
@@ -10,8 +13,12 @@ typedef enum ScreenToLoad {
 
 void InitializeScreen();
 
-void ChangeScreen(SCREEN *currentScreen);
+void ChangeScreen(SCREEN newScreen);
 
-void RenderScreen(SCREEN *currentScreen);
+SCREEN GetCurrentScreen();
 
-void UnloadScreen();
+void UpdateScreen();
+
+void RenderScreen();
+
+#endif
