@@ -1,1 +1,3 @@
 # Chess
+Requirements :
+Raylib Library
